@@ -1,0 +1,37 @@
+schema_version = "2.0"
+artifacts = ["/app/train_moe.py", "/app/moe_runtime", "/app/output.json"]
+
+[task]
+name = "insight/moe-routing-train"
+description = "Repair residual-graph and globally coupled contrastive MoE training and restartable SAM/ASAM updates over shared strided storage."
+authors = [{ name = "Vivek Gautam", email = "vivekgautam208@users.noreply.github.com" }]
+
+[metadata]
+difficulty_explanation = """
+The training report can show the expected loss even when the model receives the wrong update. Several branches share the same stored weights, and an example can affect losses for examples in other batches. Those contributions need to remain consistent without counting shared weights twice or losing part of an update. Training also evaluates temporary changes to the weights before updating the committed model. A restart or repeated request at that point can leave behind a temporary change, apply an update twice, or lose the record of a numerical overflow. The hard part is making the mathematics, shared state and recovery behavior agree, including when these failures overlap, while keeping the older training formats working.
+
+The workload data is synthetic and generated deterministically for this task. The small models, shared-weight layouts and interrupted training schedules represent realistic distributed-training failure cases and retain the debugging challenge without needing a large cluster or private production data.
+
+This is work an ML training-infrastructure engineer would do when maintaining distributed training and checkpoint recovery. A correct repair prevents silent changes to training and avoids wasting compute after an interrupted run.
+"""
+solution_explanation = "The reference uses analytic vector pullbacks for residual MoE graphs, trainable joins and the two-sided contrastive objective, accumulates adjoints in unique storage, and computes an independently owned SAM/ASAM probe. It evaluates the whole window again at that probe while applying the resulting optimizer update to the original committed weights. Portable checkpoints retain pending work, probes, prepared updates, AMP provenance and response archives. The verifier separately uses scalar autodiff and an independently expressed sharpness calculation."
+verification_explanation = "Complete CLI and staged reports, direct API receipts and fresh-process checkpoint cuts are compared against independent references. Holdouts exercise graph fanout, bypassed routing losses, repeated join ports, aliased and frozen join parameters, cross-microbatch positives, singleton and zero-weight negatives, both contrastive pullback directions, smoothed normalization, perturbation-induced routing changes, SAM/ASAM geometry, frozen and aliased storage, base and descent overflow, temporary-state rollback, relayout and delayed retries, alongside the earlier scalar and stacked regression suite. Candidate code executes in unprivileged subprocesses with /tests and verifier logs unreadable. Exact discrete types and finite floating values are required before math.isclose with relative tolerance 2e-9 and absolute tolerance 2e-10. These bands accommodate floating summation differences between analytic vector derivatives and independent scalar autodiff; they do not allow different objectives. Local validation evidence and difficulty calibration are distinct."
+category = "ML"
+subcategory = "Training"
+tags = ["mixture-of-experts", "distributed-training", "shared-parameters", "automatic-differentiation", "gradient-accumulation", "checkpoint-recovery", "mixed-precision", "contrastive-learning", "sharpness-aware-training", "debugging"]
+expert_time_estimate_hours = 8
+relevant_experience = "Hands-on distributed ML training work involving expert parallelism, stochastic rematerialization, gradient accumulation, shared parameters, mixed precision, optimizer state, EMA, and numerical debugging."
+
+[verifier]
+timeout_sec = 1800.0
+environment_mode = "separate"
+
+[agent]
+timeout_sec = 28800.0
+
+[environment]
+build_timeout_sec = 900.0
+cpus = 2
+memory_mb = 4096
+storage_mb = 10240
+gpus = 0
